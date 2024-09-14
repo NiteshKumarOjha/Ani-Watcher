@@ -9,11 +9,13 @@ import generateToken from "../utils/createToken.js";
 const createUser = asyncHandler(async (req, res) => {
   const { username, email, password } = req.body;
 
-  if (!username || !email || !password) {
+  const emailDB = email.toLowerCase();
+
+  if (!username || !emailDB || !password) {
     throw new Error("Please fill all the details");
   }
 
-  const userExists = await User.findOne({ email });
+  const userExists = await User.findOne({ email: emailDB });
 
   if (userExists) res.status(400).send("User already exists");
 
@@ -21,7 +23,11 @@ const createUser = asyncHandler(async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, salt);
 
-  const newUser = new User({ username, email, password: hashedPassword });
+  const newUser = new User({
+    username,
+    email: emailDB,
+    password: hashedPassword,
+  });
 
   try {
     await newUser.save();
@@ -41,8 +47,9 @@ const createUser = asyncHandler(async (req, res) => {
 
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
+  const emailDB = email.toLowerCase();
 
-  const existingUser = await User.findOne({ email });
+  const existingUser = await User.findOne({ email: emailDB });
 
   if (existingUser) {
     const isPasswordValid = await bcrypt.compare(
@@ -84,4 +91,56 @@ const getAllUsers = asyncHandler(async (req, res) => {
   res.json(users);
 });
 
-export { createUser, loginUser, logOutCurrentUser, getAllUsers };
+const getCurrentUserProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
+
+  if (user) {
+    res.json({
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+    });
+  } else {
+    res.status(404);
+    throw new Error("User not found");
+  }
+});
+
+const updateCurrentUserProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  if (user) {
+    user.username = req.body.username || user.username;
+    const emailDB = req.body.email.toLowerCase();
+    user.email = emailDB || user.email;
+
+    if (req.body.password) {
+      const salt = await bcrypt.genSalt(10);
+
+      const hashedPassword = await bcrypt.hash(req.body.password, salt);
+
+      user.password = hashedPassword;
+    }
+
+    const updatedUser = await user.save();
+
+    res.json({
+      _id: updatedUser._id,
+      username: updatedUser.username,
+      email: updatedUser.email,
+      isAdmin: updatedUser.isAdmin,
+    });
+  } else {
+    res.status(404);
+    throw new Error("User not found");
+  }
+});
+
+export {
+  createUser,
+  loginUser,
+  logOutCurrentUser,
+  getAllUsers,
+  getCurrentUserProfile,
+  updateCurrentUserProfile,
+};
